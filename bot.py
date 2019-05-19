@@ -1,3 +1,5 @@
+from apscheduler.schedulers.blocking import BlockingScheduler
+
 import hashlib
 import hmac
 from datetime import datetime
@@ -8,10 +10,10 @@ import slack
 import requests
 import time
 
-BITBAY_PUBLIC_KEY = <bitbay_public_key>
-BITBAY_PRIVATE_KEY = <bitbay_public_key>
+BITBAY_PUBLIC_KEY = ""
+BITBAY_PRIVATE_KEY = ""
 
-SLACK_TOKEN = <slack_token>
+SLACK_TOKEN = ""
 
 BITBAY_CHANNEL = "test"
 
@@ -49,25 +51,32 @@ def transaction2string(tr):
 
     return trstr
 
-
-last_transaction_date = None
-try:
-    with open('last_transaction_date.pkl', 'rb') as f:
-        last_transaction_date = pickle.load(f)
-except FileNotFoundError as fnfe:
+def check_new_transactions():
     last_transaction_date = None
+    try:
+        with open('last_transaction_date.pkl', 'rb') as f:
+            last_transaction_date = pickle.load(f)
+    except FileNotFoundError as fnfe:
+        last_transaction_date = None
 
-orders = json.loads(bitbay_trading_api("transactions", BITBAY_PRIVATE_KEY, BITBAY_PUBLIC_KEY).text)
+    orders = json.loads(bitbay_trading_api("transactions", BITBAY_PRIVATE_KEY, BITBAY_PUBLIC_KEY).text)
 
-ltd = None
+    ltd = None
 
-for o in orders:
-    tr_date = datetime.strptime(o['date'], "%Y-%m-%d %H:%M:%S")
-    if last_transaction_date is None or tr_date > last_transaction_date:
-        slack_message(transaction2string(o), BITBAY_CHANNEL)
-        if ltd is None or tr_date > ltd:
-            ltd = tr_date
+    for o in orders:
+        tr_date = datetime.strptime(o['date'], "%Y-%m-%d %H:%M:%S")
+        if last_transaction_date is None or tr_date > last_transaction_date:
+            slack_message(transaction2string(o), BITBAY_CHANNEL)
+            if ltd is None or tr_date > ltd:
+                ltd = tr_date
 
-if ltd:
-    with open('last_transaction_date.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
-        pickle.dump(ltd, f)
+    if ltd:
+        with open('last_transaction_date.pkl', 'wb') as f:  # Python 3: open(..., 'wb')
+            pickle.dump(ltd, f)
+
+
+if __name__ == '__main__':
+    scheduler = BlockingScheduler()
+    scheduler.add_job(check_new_transactions, 'interval', seconds=60)
+    scheduler.start()
+    
